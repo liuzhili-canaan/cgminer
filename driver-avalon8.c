@@ -125,6 +125,42 @@ uint32_t cpm_table[] =
 	0x009785e1
 };
 
+uint32_t cpm_table2[] =
+{
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,
+	0x00900c01,//412.5
+	0x00910c41,
+	0x00920c81,
+	0x00930cc1,
+	0x00940d01,
+	0x00950d41,
+	0x00960d81,
+	0x00970dc1,
+	0x00980e01,
+	0x00990e41,
+	0x009a0e81,
+	0x009b0ec1,
+	0x009c0f01,
+	0x009d0f41,
+	0x009e0f81,
+	0x009f0fc1 //787.5
+};
+
 struct avalon8_dev_description avalon8_dev_table[] = {
 	{
 		"821",
@@ -190,7 +226,10 @@ struct avalon8_dev_description avalon8_dev_table[] = {
 
 static uint32_t api_get_cpm(uint32_t freq)
 {
-	return cpm_table[freq / 25];
+	if (freq % 25 == 0)
+		return cpm_table[freq / 25];
+	else
+		return cpm_table2[(freq - 12) / 25];
 }
 
 static uint32_t encode_voltage(int volt_level)
