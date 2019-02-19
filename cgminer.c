@@ -289,6 +289,7 @@ static char *opt_set_avalon9_voltage_level;
 static char *opt_set_avalon9_voltage_level_offset;
 static char *opt_set_avalon9_freq;
 static char *opt_set_avalon9_adjust_volt_info;
+static char *opt_set_avalon9_spd_update;
 #endif
 #ifdef USE_AVALON_MINER
 static char *opt_set_avalonm_voltage;
@@ -1770,6 +1771,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_CBARG("--avalon9-adjust-volt-info",
 		     set_avalon9_adjust_volt_info, NULL, &opt_set_avalon9_adjust_volt_info,
 		     "Set Avalon9 adjust volt info, range 0-9999"),
+	OPT_WITH_CBARG("--avalon9-spd-update",
+		     set_avalon9_spd_update, NULL, &opt_set_avalon9_spd_update,
+		     "Set Avalon9 spd update, eg. type/period"),
 #endif
 #ifdef USE_AVALON_MINER
 	OPT_WITH_CBARG("--avalonm-voltage",

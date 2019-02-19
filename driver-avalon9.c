@@ -46,6 +46,9 @@ uint32_t opt_avalon9_adjust_volt_down_threshold = AVA9_DEFAULT_AJUST_VOLT_DOWN_T
 uint32_t opt_avalon9_adjust_volt_time = AVA9_DEFAULT_AJUST_VOLT_TIME;
 uint32_t opt_avalon9_adjust_volt_enable = AVA9_DEFAULT_AJUST_VOLT_ENABLE;
 
+uint32_t opt_avalon9_spd_update_type = AVA9_DEFAULT_SPD_UPDATE_TYPE;
+uint32_t opt_avalon9_spd_update_period = AVA9_DEFAULT_SPD_UPDATE_PERIOD;
+
 int opt_avalon9_freq_sel = AVA9_DEFAULT_FREQUENCY_SEL;
 
 int opt_avalon9_polling_delay = AVA9_DEFAULT_POLLING_DELAY;
@@ -476,6 +479,38 @@ static inline int get_temp_max(struct avalon9_info *info, int addr)
 	return max;
 }
 
+static inline int get_temp_average(struct avalon9_info *info, int addr)
+{
+	int i, j;
+	int average = -273;
+	int sum = 0;
+	int count = 0;
+	int tmp;
+
+	for (i = 0; i < info->miner_count[addr]; i++) {
+		for (j = AVA9_DEFAULT_ASIC_AVERAGE_TEMP_START; j <= AVA9_DEFAULT_ASIC_AVERAGE_TEMP_END; j++) {
+			if (info->temp[addr][i][j] > 0) {
+				sum += info->temp[addr][i][j];
+				count++;
+			}
+		}
+
+		if (count) {
+			tmp = sum / count;
+			if (average < tmp)
+				average = tmp;
+		}
+
+		sum = 0;
+		count = 0;
+	}
+
+	if (average < info->temp_mm[addr])
+		average = info->temp_mm[addr];
+
+	return average;
+}
+
 /*
  * Incremental PID controller
  *
@@ -499,12 +534,36 @@ static inline int get_temp_max(struct avalon9_info *info, int addr)
  */
 static inline uint32_t adjust_fan(struct avalon9_info *info, int id)
 {
-	int t;
+	int t, tm, ta;
 	double delta_u;
 	double delta_p, delta_i, delta_d;
 	uint32_t pwm;
+	static uint8_t count = 0;
+	static uint8_t flag = 0;
+	static uint16_t time_count = 0;
 
-	t = get_temp_max(info, id);
+	tm = get_temp_max(info, id);
+	ta = get_temp_average(info, id);
+
+	/* Before 10Mins, used max temp */
+	if (time_count > 300) {
+		if ((tm > AVA9_DEFAULT_PID_TEMP_MAX) || flag) {
+			t = tm;
+
+			if (!flag)
+				flag = 1;
+
+			if (count++ > 5) {
+				flag = 0;
+				count = 0;
+			}
+		} else {
+			t = ta;
+		}
+	} else {
+		t = tm;
+		time_count++;
+	}
 
 	/* update target error */
 	info->pid_e[id][2] = info->pid_e[id][1];
@@ -754,11 +813,18 @@ static int decode_pkg(struct cgpu_info *avalon9, struct avalon9_ret *ar, int mod
 
 			memcpy(&tmp, ar->data + 0, 4);
 			if (tmp)
-				info->get_asic[modular_id][miner_id][asic_id][0] = be32toh(tmp);
+				info->get_asic_buffer[modular_id][miner_id][asic_id][0] = be32toh(tmp);
 
 			memcpy(&tmp, ar->data + 4, 4);
 			if (tmp)
-				info->get_asic[modular_id][miner_id][asic_id][1] = be32toh(tmp);
+				info->get_asic_buffer[modular_id][miner_id][asic_id][1] = be32toh(tmp);
+
+			if (opt_avalon9_spd_update_type == 0)
+				memcpy(info->get_asic[modular_id][miner_id][asic_id], info->get_asic_buffer[modular_id][miner_id][asic_id], sizeof(info->get_asic_buffer[modular_id][miner_id][asic_id]));
+			else if ((miner_id == AVA9_DEFAULT_MINER_CNT - 1) && (asic_id == AVA9_DEFAULT_ASIC_MAX - 1)) {
+				memcpy(info->get_asic[modular_id], info->get_asic_buffer[modular_id], sizeof(info->get_asic_buffer[modular_id]));
+			}
+
 
 			for (i = 0; i < AVA9_DEFAULT_PLL_CNT; i++) {
 				memcpy(&tmp, ar->data + 8 + i * 2, 2);
@@ -1583,6 +1649,10 @@ static int polling(struct cgpu_info *avalon9)
 	int do_adjust_fan = 0;
 	uint32_t fan_pwm;
 	double device_tdiff;
+	uint8_t error_polling_cnt_limit = 10;
+
+	if (opt_avalon9_spd_update_type == 1)
+		error_polling_cnt_limit = 200;
 
 	cgtime(&current_fan);
 	device_tdiff = tdiff(&current_fan, &(info->last_fan_adj));
@@ -1627,7 +1697,7 @@ static int polling(struct cgpu_info *avalon9)
 			memcpy(send_pkg.data, info->mm_dna[i],  AVA9_MM_DNA_LEN);
 			avalon9_init_pkg(&send_pkg, AVA9_P_RSTMMTX, 1, 1);
 			avalon9_iic_xfer_pkg(avalon9, i, &send_pkg, NULL);
-			if (info->error_polling_cnt[i] >= 10)
+			if (info->error_polling_cnt[i] >= error_polling_cnt_limit)
 				detach_module(avalon9, i);
 		}
 
@@ -1756,6 +1826,36 @@ static void avalon9_init_setting(struct cgpu_info *avalon9, int addr)
 		avalon9_send_bc_pkgs(avalon9, &send_pkg);
 	else
 		avalon9_iic_xfer_pkg(avalon9, addr, &send_pkg, NULL);
+}
+
+static void avalon9_set_spd_update_option(struct cgpu_info *avalon9, int addr,
+						uint32_t spd_update_type, uint32_t spd_update_period)
+{
+	struct avalon9_info *info = avalon9->device_data;
+	struct avalon9_pkg send_pkg;
+	int32_t tmp;
+
+	memset(send_pkg.data, 0, AVA9_P_DATA_LEN);
+
+	tmp = be32toh(spd_update_type);
+	memcpy(send_pkg.data + 0, &tmp, 4);
+	applog(LOG_ERR, "%s-%d-%d: avalon9 set spd update type %d",
+			avalon9->drv->name, avalon9->device_id, addr, spd_update_type);
+
+	tmp = be32toh(spd_update_period);
+	memcpy(send_pkg.data + 4, &tmp, 4);
+	applog(LOG_ERR, "%s-%d-%d: avalon9 set spd update  period %d",
+			avalon9->drv->name, avalon9->device_id, addr, spd_update_period);
+
+	/* Package the data */
+	avalon9_init_pkg(&send_pkg, AVA9_P_SET_SPD_UPDATE, 1, 1);
+
+	if (addr == AVA9_MODULE_BROADCAST)
+		avalon9_send_bc_pkgs(avalon9, &send_pkg);
+	else
+		avalon9_iic_xfer_pkg(avalon9, addr, &send_pkg, NULL);
+
+	return;
 }
 
 static void avalon9_set_adjust_voltage_option(struct cgpu_info *avalon9, int addr,
@@ -2190,6 +2290,8 @@ static int64_t avalon9_scanhash(struct thr_info *thr)
 				}
 				avalon9_init_setting(avalon9, i);
 
+				avalon9_set_spd_update_option(avalon9, i, opt_avalon9_spd_update_type, opt_avalon9_spd_update_period);
+
 				info->freq_mode[i] = AVA9_FREQ_PLLADJ_MODE;
 				break;
 			case AVA9_FREQ_PLLADJ_MODE:
@@ -2357,7 +2459,7 @@ static struct api_data *avalon9_api_stats(struct cgpu_info *avalon9)
 				}
 			}
 			dh = b ? (b / (a + b)) * 100 : 0;
-			sprintf(buf, " DH[%.3f%%]", dh);
+			sprintf(buf, " DH[%.3f%% %.0f %.0f]", dh, a/1000, b/1000);
 			strcat(statbuf, buf);
 		}
 
@@ -2366,6 +2468,9 @@ static struct api_data *avalon9_api_stats(struct cgpu_info *avalon9)
 
 		sprintf(buf, " TMax[%d]", get_temp_max(info, i));
 		strcat(statbuf, buf);
+
+		sprintf(buf, " TAverage[%d]", get_temp_average(info, i));
+				strcat(statbuf, buf);
 
 		sprintf(buf, " Fan[%d]", info->fan_cpm[i]);
 		strcat(statbuf, buf);
@@ -2612,6 +2717,18 @@ static struct api_data *avalon9_api_stats(struct cgpu_info *avalon9)
 	root = api_add_uint32(root, "Nonce Mask", &opt_avalon9_nonce_mask, true);
 
 	return root;
+}
+
+char *set_avalon9_spd_update(char *arg)
+{
+	int ret;
+
+	ret = sscanf(arg, "%d-%d", &opt_avalon9_spd_update_type,
+						&opt_avalon9_spd_update_period);
+	if (ret < 1)
+		return "Invalid value for spd updates";
+
+	return NULL;
 }
 
 /* format: voltage[-addr[-miner]]

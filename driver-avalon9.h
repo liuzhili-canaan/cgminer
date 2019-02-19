@@ -19,7 +19,7 @@
 #define AVA9_DEFAULT_FAN_MIN		5 /* % */
 #define AVA9_DEFAULT_FAN_MAX		100
 
-#define AVA9_DEFAULT_TEMP_TARGET	93
+#define AVA9_DEFAULT_TEMP_TARGET	90
 #define AVA9_DEFAULT_TEMP_OVERHEAT	105
 
 #define AVA9_DEFAULT_VOLTAGE_LEVEL_MIN	-15
@@ -45,6 +45,9 @@
 #define AVA9_DEFAULT_AJUST_VOLT_DOWN_THRESHOLD 5210
 #define AVA9_DEFAULT_AJUST_VOLT_TIME 600
 #define AVA9_DEFAULT_AJUST_VOLT_ENABLE 1
+
+#define AVA9_DEFAULT_SPD_UPDATE_TYPE 		0
+#define AVA9_DEFAULT_SPD_UPDATE_PERIOD 		300
 
 #define AVA9_DEFAULT_OVERCLOCKING_OFF	0
 #define AVA9_DEFAULT_OVERCLOCKING_ON	1
@@ -101,6 +104,9 @@
 #define AVA9_DEFAULT_PID_D		0
 #define AVA9_DEFAULT_PID_TEMP_MIN_DIFF	5
 #define AVA9_DEFAULT_PID_TEMP_MAX	105
+
+#define AVA9_DEFAULT_ASIC_AVERAGE_TEMP_START	8
+#define AVA9_DEFAULT_ASIC_AVERAGE_TEMP_END	17
 
 #define AVA9_DEFAULT_LV2_TH_MS		0
 #define AVA9_DEFAULT_LV3_TH_MS		0
@@ -190,7 +196,7 @@
 #define AVA9_P_STATUS_PVT_RO		0x4f
 #define AVA9_P_SET_ADJUST_VOLT	0x51
 #define AVA9_P_STATUS_ASIC_PLL		0x52
-
+#define AVA9_P_SET_SPD_UPDATE	0x53
 
 #define AVA9_MODULE_BROADCAST		0
 /* End of avalon9 protocol package type */
@@ -324,6 +330,7 @@ struct avalon9_info {
 	uint32_t get_pll[AVA9_DEFAULT_MODULARS][AVA9_DEFAULT_MINER_CNT][AVA9_DEFAULT_PLL_CNT];
 
 	uint32_t get_asic[AVA9_DEFAULT_MODULARS][AVA9_DEFAULT_MINER_CNT][AVA9_DEFAULT_ASIC_MAX][2 + AVA9_DEFAULT_PLL_CNT];
+	uint32_t get_asic_buffer[AVA9_DEFAULT_MODULARS][AVA9_DEFAULT_MINER_CNT][AVA9_DEFAULT_ASIC_MAX][2 + AVA9_DEFAULT_PLL_CNT];
 
 	int8_t factory_info[AVA9_DEFAULT_MODULARS][AVA9_DEFAULT_FACTORY_INFO_CNT];
 	int8_t overclocking_info[AVA9_DEFAULT_OVERCLOCKING_CNT];
@@ -378,6 +385,7 @@ extern char *set_avalon9_freq(char *arg);
 extern char *set_avalon9_voltage_level(char *arg);
 extern char *set_avalon9_voltage_level_offset(char *arg);
 extern char *set_avalon9_adjust_volt_info(char *arg);
+extern char *set_avalon9_spd_update(char *arg);
 extern int opt_avalon9_temp_target;
 extern int opt_avalon9_polling_delay;
 extern int opt_avalon9_aucspeed;
