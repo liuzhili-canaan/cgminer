@@ -228,8 +228,8 @@
 #define AVA8_OTP_INFO_LOTIDCRC_OFFSET	0
 #define AVA8_OTP_INFO_LOTID_OFFSET  	6
 
-#define AVA8_DEF_ADJ_PARAM_NUM	4
-#define AVA8_INVALID_ADJ_PARAM	-1
+#define AVA8_DEF_ADJ_PARAM_NUM	10
+#define AVA8_INVALID_ADJ_PARAM	0xffff
 
 struct avalon8_pkg {
 	uint8_t head[2];
