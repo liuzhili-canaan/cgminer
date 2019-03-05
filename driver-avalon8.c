@@ -2222,7 +2222,7 @@ static void avalon8_set_adj(struct cgpu_info *avalon8, int addr, int *adj)
 	tmp = be32toh(adj[6]);
 	memcpy(send_pkg.data, &tmp, 4);
 	applog(LOG_DEBUG, "%s-%d-%d: avalon8 set adj timer interval %d",
-			avalon8->drv->name, avalon8->device_id, addr, tmp);
+			avalon8->drv->name, avalon8->device_id, addr, adj[6]);
 
 	send_pkg.data[4] = (int8_t)adj[7];
 	applog(LOG_DEBUG, "%s-%d-%d: avalon8 set adj param index %d",
@@ -2403,7 +2403,15 @@ static int64_t avalon8_scanhash(struct thr_info *thr)
 				}
 				avalon8_init_setting(avalon8, i);
 
+				for (k = 0; k < AVA8_DEF_ADJ_PARAM_NUM; k++) {
+					if (opt_avalon8_adj[k] != AVA8_INVALID_ADJ_PARAM)
+						adj_flag = true;
+				}
+				if (adj_flag)
+					avalon8_set_adj(avalon8, i, opt_avalon8_adj);
+
 				info->freq_mode[i] = AVA8_FREQ_PLLADJ_MODE;
+
 				break;
 			case AVA8_FREQ_PLLADJ_MODE:
 				if (opt_avalon8_smart_speed == AVA8_DEFAULT_SMARTSPEED_OFF)
@@ -2447,13 +2455,6 @@ static int64_t avalon8_scanhash(struct thr_info *thr)
 				}
 				avalon8_set_ss_param(avalon8, i);
 			}
-
-			for (k = 0; k < AVA8_DEF_ADJ_PARAM_NUM; k++) {
-				if (opt_avalon8_adj[k] != AVA8_INVALID_ADJ_PARAM)
-					adj_flag = true;
-			}
-			if (adj_flag)
-				avalon8_set_adj(avalon8, i, opt_avalon8_adj);
 
 			avalon8_set_finish(avalon8, i);
 			cg_wunlock(&info->update_lock);
