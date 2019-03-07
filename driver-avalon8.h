@@ -110,6 +110,9 @@
 
 #define AVA821_DEFAULT_TEMP_TARGET	75
 
+#define AVA8_DEFAULT_SPD_UPDATE_TYPE 		0
+#define AVA8_DEFAULT_SPD_UPDATE_PERIOD 		300
+
 /* PID CONTROLLER*/
 #define AVA8_DEFAULT_PID_P		2
 #define AVA8_DEFAULT_PID_I		2
@@ -195,6 +198,7 @@
 #define AVA8_P_SET_ADJ_FAC_UP		0x51
 #define AVA8_P_SET_ADJ_FAC_DOWN	0x52
 #define AVA8_P_SET_ADJ_CONTROL		0x53
+#define AVA8_P_SET_SPD_UPDATE	0x54
 
 #define AVA8_MODULE_BROADCAST	0
 /* End of avalon8 protocol package type */
@@ -329,6 +333,7 @@ struct avalon8_info {
 	uint32_t get_pll[AVA8_DEFAULT_MODULARS][AVA8_DEFAULT_MINER_CNT][AVA8_DEFAULT_PLL_CNT];
 
 	uint32_t get_asic[AVA8_DEFAULT_MODULARS][AVA8_DEFAULT_MINER_CNT][AVA8_DEFAULT_ASIC_MAX][6];
+	uint32_t get_asic_buffer[AVA8_DEFAULT_MODULARS][AVA8_DEFAULT_MINER_CNT][AVA8_DEFAULT_ASIC_MAX][6];
 
 	int8_t factory_info[AVA8_DEFAULT_MODULARS][AVA8_DEFAULT_FACTORY_INFO_CNT + AVA8_DEFAULT_MINER_CNT];
 	int8_t overclocking_info[AVA8_DEFAULT_OVERCLOCKING_CNT];
@@ -385,6 +390,7 @@ extern char *set_avalon8_voltage_level(char *arg);
 extern char *set_avalon8_voltage_level_offset(char *arg);
 extern char *set_avalon8_asic_otp(char *arg);
 extern char *set_avalon8_adj(char *arg);
+extern char *set_avalon8_spd_update(char *arg);
 extern int opt_avalon8_temp_target;
 extern int opt_avalon8_polling_delay;
 extern int opt_avalon8_aucspeed;

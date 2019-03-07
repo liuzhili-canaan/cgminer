@@ -280,6 +280,7 @@ static char *opt_set_avalon8_voltage_level_offset;
 static char *opt_set_avalon8_freq;
 static char *opt_set_avalon8_asic_otp;
 static char *opt_set_avalon8_adj;
+static char *opt_set_avalon8_spd_update;
 #endif
 #ifdef USE_AVALON_MINER
 static char *opt_set_avalonm_voltage;
@@ -1601,6 +1602,9 @@ static struct opt_table opt_config_table[] = {
 	OPT_WITH_CBARG("--avalon8-adj",
 		     set_avalon8_adj, NULL, &opt_set_avalon8_adj,
 		     "Set Avalon8 adjust control params"),
+	OPT_WITH_CBARG("--avalon8-spd-update",
+		     set_avalon8_spd_update, NULL, &opt_set_avalon8_spd_update,
+		     "Set Avalon8 spd update, eg. type/period"),
 #endif
 #ifdef USE_AVALON_MINER
 	OPT_WITH_CBARG("--avalonm-voltage",

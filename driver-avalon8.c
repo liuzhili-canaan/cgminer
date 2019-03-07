@@ -72,6 +72,9 @@ uint32_t opt_avalon8_pid_p = AVA8_DEFAULT_PID_P;
 uint32_t opt_avalon8_pid_i = AVA8_DEFAULT_PID_I;
 uint32_t opt_avalon8_pid_d = AVA8_DEFAULT_PID_D;
 
+uint32_t opt_avalon8_spd_update_type = AVA8_DEFAULT_SPD_UPDATE_TYPE;
+uint32_t opt_avalon8_spd_update_period = AVA8_DEFAULT_SPD_UPDATE_PERIOD;
+
 int opt_avalon8_adj[AVA8_DEF_ADJ_PARAM_NUM] =
 {
 	AVA8_INVALID_ADJ_PARAM,
@@ -902,14 +905,20 @@ static int decode_pkg(struct cgpu_info *avalon8, struct avalon8_ret *ar, int mod
 
 			memcpy(&tmp, ar->data + 0, 4);
 			if (tmp)
-				info->get_asic[modular_id][miner_id][asic_id][0] = be32toh(tmp);
+				info->get_asic_buffer[modular_id][miner_id][asic_id][0] = be32toh(tmp);
 
 			memcpy(&tmp, ar->data + 4, 4);
 			if (tmp)
-				info->get_asic[modular_id][miner_id][asic_id][1] = be32toh(tmp);
+				info->get_asic_buffer[modular_id][miner_id][asic_id][1] = be32toh(tmp);
 
 			for (i = 0; i < AVA8_DEFAULT_PLL_CNT; i++)
-				info->get_asic[modular_id][miner_id][asic_id][2 + i] = ar->data[8 + i];
+				info->get_asic_buffer[modular_id][miner_id][asic_id][2 + i] = ar->data[8 + i];
+
+			if (opt_avalon8_spd_update_type == 0)
+				memcpy(info->get_asic[modular_id][miner_id][asic_id], info->get_asic_buffer[modular_id][miner_id][asic_id], sizeof(info->get_asic_buffer[modular_id][miner_id][asic_id]));
+			else if ((miner_id == AVA8_DEFAULT_MINER_CNT - 1) && (asic_id == AVA8_DEFAULT_ASIC_MAX - 1)) {
+				memcpy(info->get_asic[modular_id], info->get_asic_buffer[modular_id], sizeof(info->get_asic_buffer[modular_id]));
+			}
 
 			if (!strncmp((char *)&(info->mm_version[modular_id]), "851", 3)) {
 				for (i = 0; i < AVA8_DEFAULT_PLL_CNT; i++) {
@@ -1733,6 +1742,10 @@ static int polling(struct cgpu_info *avalon8)
 	int do_adjust_fan = 0;
 	uint32_t fan_pwm;
 	double device_tdiff;
+	uint8_t error_polling_cnt_limit = 10;
+	
+	if (opt_avalon8_spd_update_type == 1)
+		error_polling_cnt_limit = 200;
 
 	cgtime(&current_fan);
 	device_tdiff = tdiff(&current_fan, &(info->last_fan_adj));
@@ -1775,7 +1788,7 @@ static int polling(struct cgpu_info *avalon8)
 			memset(send_pkg.data, 0, AVA8_P_DATA_LEN);
 			avalon8_init_pkg(&send_pkg, AVA8_P_RSTMMTX, 1, 1);
 			avalon8_iic_xfer_pkg(avalon8, i, &send_pkg, NULL);
-			if (info->error_polling_cnt[i] >= 10)
+			if (info->error_polling_cnt[i] >= error_polling_cnt_limit)
 				detach_module(avalon8, i);
 		}
 
@@ -2245,6 +2258,36 @@ static void avalon8_set_adj(struct cgpu_info *avalon8, int addr, int *adj)
 		avalon8_iic_xfer_pkg(avalon8, addr, &send_pkg, NULL);
 }
 
+static void avalon8_set_spd_update_option(struct cgpu_info *avalon8, int addr,
+						uint32_t spd_update_type, uint32_t spd_update_period)
+{
+	struct avalon8_info *info = avalon8->device_data;
+	struct avalon8_pkg send_pkg;
+	int32_t tmp;
+
+	memset(send_pkg.data, 0, AVA8_P_DATA_LEN);
+
+	tmp = be32toh(spd_update_type);
+	memcpy(send_pkg.data + 0, &tmp, 4);
+	applog(LOG_ERR, "%s-%d-%d: avalon8 set spd update type %d",
+			avalon8->drv->name, avalon8->device_id, addr, spd_update_type);
+
+	tmp = be32toh(spd_update_period);
+	memcpy(send_pkg.data + 4, &tmp, 4);
+	applog(LOG_ERR, "%s-%d-%d: avalon8 set spd update  period %d",
+			avalon8->drv->name, avalon8->device_id, addr, spd_update_period);
+
+	/* Package the data */
+	avalon8_init_pkg(&send_pkg, AVA8_P_SET_SPD_UPDATE, 1, 1);
+
+	if (addr == AVA8_MODULE_BROADCAST)
+		avalon8_send_bc_pkgs(avalon8, &send_pkg);
+	else
+		avalon8_iic_xfer_pkg(avalon8, addr, &send_pkg, NULL);
+
+	return;
+}
+
 static void avalon8_stratum_finish(struct cgpu_info *avalon8)
 {
 	struct avalon8_pkg send_pkg;
@@ -2402,6 +2445,8 @@ static int64_t avalon8_scanhash(struct thr_info *thr)
 						opt_avalon8_nonce_mask = AVA8_DEFAULT_NONCE_MASK;
 				}
 				avalon8_init_setting(avalon8, i);
+
+				avalon8_set_spd_update_option(avalon8, i, opt_avalon8_spd_update_type, opt_avalon8_spd_update_period);
 
 				for (k = 0; k < AVA8_DEF_ADJ_PARAM_NUM; k++) {
 					if (opt_avalon8_adj[k] != AVA8_INVALID_ADJ_PARAM)
@@ -2607,7 +2652,7 @@ static struct api_data *avalon8_api_stats(struct cgpu_info *avalon8)
 				}
 			}
 			dh = b ? (b / (a + b)) * 100 : 0;
-			sprintf(buf, " DH[%.3f%%]", dh);
+			sprintf(buf, " DH[%.3f%% %.0f %.0f]", dh, a/1000, b/1000);
 			strcat(statbuf, buf);
 		}
 
@@ -3202,6 +3247,18 @@ char *set_avalon8_adj_control_info(struct cgpu_info *avalon8, char *arg)
 
 	applog(LOG_NOTICE, "%s-%d: Set adj control info: time %d, pll_index %d, adj_all_on %d, adj_pll_on %d",
 		avalon8->drv->name, avalon8->device_id, time, pll_index, adj_all_on, adj_pll_on);
+
+	return NULL;
+}
+
+char *set_avalon8_spd_update(char *arg)
+{
+	int ret;
+
+	ret = sscanf(arg, "%d-%d", &opt_avalon8_spd_update_type,
+						&opt_avalon8_spd_update_period);
+	if (ret < 1)
+		return "Invalid value for spd updates";
 
 	return NULL;
 }
